@@ -1,0 +1,10 @@
+# 로그를 읽을 부분
+filebeat.inputs:
+    - type: log # 입력 소스 타입
+      enabled: true # input 활성화여부
+      paths: # 로그파일 읽을 경로, 멀티로 설정할 수 있음
+          - /usr/share/filebeat/logs/*.log
+
+# 로그를 내보낼 부분, 엘라스틱 서치로 바로 보내도록 설정도 가능
+output.logstash:
+    hosts: ['logstash:5045'] # 로그를 내보낼 호스트와 포트

@@ -1,0 +1,89 @@
+# 도커 컴포즈 파일 버전(Compose V2에선 생략 가능하지만 3.8도 문제 없음)
+version: '3.8'
+
+# 실행할 컨테이너(서비스)들을 정의
+services:
+    elasticsearch:
+        # 사용할 이미지와 태그(Elasticsearch 8.14.3)
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+        # 컨테이너 이름(고정 이름이 필요할 때 유용)
+        container_name: elasticsearch
+        environment:
+            # 단일 노드 모드(클러스터가 아닌 로컬 개발용)
+            - discovery.type=single-node
+            # 엘라스틱 서치 프로세스 메모리를 스왑하지 않도록 잠금(성능/안정성 ↑)
+            - bootstrap.memory_lock=true
+            # JVM 힙 사이즈 최소/최대를 동일하게 1GB로 고정(필요시 2g,4g 등 조절)
+            - ES_JAVA_OPTS=-Xms1g -Xmx1g
+            # 보안 기능(xpack security) 비활성화(개발 편의용, 운영에서는 true 권장)
+            - xpack.security.enabled=false
+        ulimits:
+            memlock:
+                # 메모리 잠금 한도 무제한(위 memory_lock=true가 제대로 동작하도록)
+                soft: -1
+                hard: -1
+        ports:
+            # 호스트 9200 → 컨테이너 9200(Elasticsearch HTTP API)
+            - '9200:9200'
+        volumes:
+            # 엘라스틱 서치 데이터 영속화(컨테이너 재생성에도 데이터 유지)
+            - es_data:/usr/share/elasticsearch/data
+
+    kibana:
+        # Kibana 8.14.3 이미지
+        image: docker.elastic.co/kibana/kibana:8.14.3
+        # 컨테이너 이름
+        container_name: kibana
+        environment:
+            # Kibana가 접속할 ES 주소(서비스명으로 DNS 접근)
+            # xpack.security를 ES에서 껐으니 Kibana 로그인 없이 접속됨
+            - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+        ports:
+            # 호스트 5601 → 컨테이너 5601(Kibana UI)
+            - '5601:5601'
+        depends_on:
+            # 엘라스틱 서치가 먼저 "시작"되도록 순서만 보장(준비 완료 대기는 아님)
+            - elasticsearch
+
+    logstash:
+        # Logstash 8.14.3 이미지
+        image: docker.elastic.co/logstash/logstash:8.14.3
+        # 컨테이너 이름
+        container_name: logstash
+        environment:
+            # Logstash JVM 힙 사이즈(파이프라인 복잡해지면 늘리기)
+            - LS_JAVA_OPTS=-Xms512m -Xmx512m
+        ports:
+            # 호스트 5044 → 컨테이너 5044(Beats 입력 포트: Filebeat가 여기로 보냄)
+            - '5045:5045'
+            # 호스트 5000 → 컨테이너 5000(TCP 입력 등 커스텀 입력용)
+            - '5000:5000'
+            # 호스트 9600 → 컨테이너 9600(Logstash 모니터링 API)
+            - '9600:9600'
+        volumes:
+            # 로컬의 파이프라인 설정을 컨테이너 경로로 마운트
+            # 예: ./logstash/pipeline/ 아래에 pipeline.conf 등 배치
+            - ./logstash/pipeline:/usr/share/logstash/pipeline
+        depends_on:
+            # 엘라스틱 서치가 먼저 "시작"되도록(순서 보장)
+            - elasticsearch
+
+    filebeat:
+        # Filebeat 8.14.3 이미지
+        image: docker.elastic.co/beats/filebeat:8.14.3
+        # 컨테이너 이름
+        container_name: filebeat
+        # Filebeat가 호스트/마운트된 파일을 읽을 수 있게 root로 실행(권한 문제 회피)
+        user: root
+        volumes:
+            # Filebeat 설정 파일을 읽기 전용으로 마운트(수정은 호스트에서)
+            - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+            # 수집할 로그 디렉터리를 읽기 전용으로 마운트(여기에 실제 로그가 있어야 함)
+            - ./logs:/usr/share/filebeat/logs:ro
+        depends_on:
+            # Logstash가 먼저 "시작"되도록(순서 보장)
+            - logstash
+
+# 도커가 관리하는 네임드 볼륨 정의(여기선 ES 데이터 보관용)
+volumes:
+    es_data:

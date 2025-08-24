@@ -1,0 +1,34 @@
+# input
+# 어떤 소스에서 데이터를 받을지
+input {
+  beats {
+    port => 5044 # 현재 파일비트가 데이터를 보낼 포트 (filebat.yml 참조)
+  }
+}
+
+# filter
+# 수집된 로그 파싱
+filter {
+  # grok - 정규식 기반 패턴 매칭
+  # ex_1) TIMESTAMP_ISO8601:logtime --> ISO8601 형식의 날짜/시간을 찾아 logtime 필드로 저장
+  # ex_2) LOGLEVEL:loglevel --> DEBUG, INFO, WRAN, ERROR 등의 로그 레벨을 찾아 loglevel 필드로 저장
+  # ex_3) GREEDYDATA:msg --> 나머지 문자열 msg 필드로 저장
+  grok {
+    match => { "message" => "%{TIMESTAMP_ISO8601:logtime} %{LOGLEVEL:loglevel} %{GREEDYDATA:msg}" }
+  }
+}
+
+# output
+# 데이터를 어디로 보낼지
+output {
+  # hosts --> 목적지, docker-compose에서 설정되어있어 DNS로 접근
+  # index --> 인덱스 이름 형식 지정
+  #           ex) local-logs-%{+YYYY.MM.dd}로 지정하면, 키바나에서 local-logs-*로 설정하여 날짜별 로그 조회 가능
+  elasticsearch {
+    hosts => ["http://elasticsearch:9200"]
+    index => "local-logs-%{+YYYY.MM.dd}"
+  }
+  # 콘솔에 JSON 형태로 출력
+  # 개발/테스트 시 logstash가 실제로 어떤 데이터를 파싱했는지 확인
+  stdout { codec => rubydebug }
+}
