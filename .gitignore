@@ -1,0 +1,9 @@
+/windows/beats/filebeat/filebeat-*/
+
+/windows/elasticsearch/elasticsearch-*/
+
+/windows/kibana/kibana-*/
+
+/windows/logstash/logstash-*/
+
+*.zip
